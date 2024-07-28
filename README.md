@@ -1,8 +1,10 @@
 # OpenRGB-Installer
 
 Tiny OpenRGB installer for windows.  
-It will download the latest experimental build on each run, and can also serve as an updater.
+It will download the latest experimental build on each run, and can also serve as an updater.  
 It will also create desktop and start menu shortcuts.
+
+![image](assets/screenshot.png)
 
 ## Download and run
 
