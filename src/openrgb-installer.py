@@ -179,6 +179,7 @@ class OpenRGBInstaller(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
     installr = OpenRGBInstaller()
     installr.show()
     sys.exit(app.exec())
