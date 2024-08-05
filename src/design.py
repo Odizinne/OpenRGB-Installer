@@ -40,6 +40,6 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "OpenRGB installer"))
         self.launch_button.setText(_translate("MainWindow", "Launch OpenRGB"))
         self.status_label.setText(_translate("MainWindow", "Installing"))

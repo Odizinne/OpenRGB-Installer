@@ -8,7 +8,7 @@ import requests
 import psutil
 import winshell
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, QTranslator, QLocale
 from PyQt6.QtGui import QIcon
 from design import Ui_MainWindow
 
@@ -41,13 +41,15 @@ class InstallWorker(QThread):
                 self.move_folder()
                 self.create_shortcuts(os.path.join(self.target_path, "OpenRGB Windows 64-bit"))
 
-            self.finished.emit(True, "OpenRGB installed successfully!\nCreated start menu and desktop shortcuts.")
+            self.finished.emit(
+                True, self.tr("OpenRGB installed successfully!\nCreated start menu and desktop shortcuts.")
+            )
         except Exception as e:
             self.finished.emit(False, str(e))
 
     def download_file(self, url, save_path):
         try:
-            self.status.emit("Downloading...")
+            self.status.emit(self.tr("Downloading..."))
 
             response = requests.get(url, stream=True)
             response.raise_for_status()
@@ -66,9 +68,9 @@ class InstallWorker(QThread):
         except requests.exceptions.HTTPError as http_err:
             raise Exception(f"HTTP error occurred: {http_err}")
         except requests.exceptions.ConnectionError:
-            raise Exception("A connection error occurred. Cannot reach the server.")
+            raise Exception(self.tr("A connection error occurred. Cannot reach the server."))
         except requests.exceptions.Timeout:
-            raise Exception("The request timed out.")
+            raise Exception(self.tr("The request timed out."))
         except requests.exceptions.RequestException as err:
             raise Exception(f"An error occurred while downloading the file: {err}")
         except Exception as err:
@@ -76,25 +78,25 @@ class InstallWorker(QThread):
 
     def extract_zip(self, file_path):
         try:
-            self.status.emit("Extracting files...")
+            self.status.emit(self.tr("Extracting files..."))
 
             self.extract_path = tempfile.mkdtemp()
             with zipfile.ZipFile(file_path, "r") as zip_ref:
                 zip_ref.extractall(self.extract_path)
         except zipfile.BadZipFile:
-            raise Exception("Error: The downloaded file is not a valid zip file.")
+            raise Exception(self.tr("Error: The downloaded file is not a valid zip file."))
         except Exception as err:
             raise Exception(f"An error occurred while extracting the zip file: {err}")
 
     def move_folder(self):
         try:
-            self.status.emit("Installing to target path...")
+            self.status.emit(self.tr("Installing to target path..."))
 
             extracted_folders = [
                 d for d in os.listdir(self.extract_path) if os.path.isdir(os.path.join(self.extract_path, d))
             ]
             if not extracted_folders:
-                raise Exception("No folder found in the extracted contents.")
+                raise Exception(self.tr("No folder found in the extracted contents."))
 
             extracted_folder_name = extracted_folders[0]
 
@@ -130,7 +132,6 @@ class OpenRGBInstaller(QMainWindow):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
-        self.setWindowTitle("OpenRGB installer")
         self.setWindowIcon(QIcon("icons/openrgb-installer.png"))
         self.setFixedSize(self.size())
         self.url = "https://gitlab.com/CalcProgrammer1/OpenRGB/-/jobs/artifacts/master/download?job=Windows%2064"
@@ -150,35 +151,51 @@ class OpenRGBInstaller(QMainWindow):
                 subprocess.Popen(executable_path, creationflags=subprocess.CREATE_NEW_CONSOLE)
                 self.close()
             else:
-                raise FileNotFoundError("OpenRGB executable not found.")
+                raise FileNotFoundError(self.tr("OpenRGB executable not found."))
         except Exception as e:
-            self.show_message("Error", f"Failed to launch OpenRGB: {e}")
+            self.show_message(self.tr("Error"), self.tr(f"Failed to launch OpenRGB: {e}"))
 
     def install_program(self):
         kill_openrgb()
         self.ui.status_progress_bar.setValue(0)
-        self.ui.status_label.setText("Starting install...")
+        self.ui.status_label.setText(self.tr("Starting install..."))
         self.install_worker.start()
 
     def on_install_finished(self, success, message):
         if success:
             self.ui.launch_button.setEnabled(True)
-            self.ui.status_label.setText("install finished.")
-            self.show_message("Success", message)
+            self.ui.status_label.setText(self.tr("Install finished."))
+            self.show_message(self.tr("Success"), message)
         else:
-            self.ui.status_label.setText("install failed.")
-            self.show_message("Error", message)
+            self.ui.status_label.setText(self.tr("Install failed."))
+            self.show_message(self.tr("Error"), message)
 
     def show_message(self, title, message):
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle(title)
         msg_box.setText(message)
-        msg_box.setIcon(QMessageBox.Icon.Information if title == "Success" else QMessageBox.Icon.Critical)
+        msg_box.setIcon(QMessageBox.Icon.Information if title == self.tr("Success") else QMessageBox.Icon.Critical)
         msg_box.exec()
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    translator = QTranslator()
+    locale = QLocale.system().name()
+    if locale.startswith("en"):
+        file_name = "tr/openrgb-installer_en.qm"
+    elif locale.startswith("es"):
+        file_name = "tr/openrgb-installer_es.qm"
+    elif locale.startswith("fr"):
+        file_name = "tr/openrgb-installer_fr.qm"
+    elif locale.startswith("de"):
+        file_name = "tr/openrgb-installer_de.qm"
+    else:
+        file_name = None
+
+    if file_name and translator.load(file_name):
+        app.installTranslator(translator)
+
     app.setStyle("Fusion")
     installr = OpenRGBInstaller()
     installr.show()
