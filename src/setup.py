@@ -15,6 +15,7 @@ build_exe_options = {
     "build_exe": build_dir,
     "zip_include_packages": zip_include_packages,
     "excludes": ["tkinter"],
+    "silent": True,
 }
 
 executables = [

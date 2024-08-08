@@ -181,15 +181,10 @@ class OpenRGBInstaller(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     translator = QTranslator()
-    locale = QLocale.system().name()
-    if locale.startswith("en"):
-        file_name = "tr/openrgb-installer_en.qm"
-    elif locale.startswith("es"):
-        file_name = "tr/openrgb-installer_es.qm"
-    elif locale.startswith("fr"):
-        file_name = "tr/openrgb-installer_fr.qm"
-    elif locale.startswith("de"):
-        file_name = "tr/openrgb-installer_de.qm"
+    locale_name = QLocale.system().name()
+    locale = locale_name[:2]
+    if locale:
+        file_name = f"openrgb-installer_{locale}.qm"
     else:
         file_name = None
 
