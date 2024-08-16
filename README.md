@@ -11,9 +11,9 @@ It will also create desktop and start menu shortcuts.
 - Download latest build [here](https://github.com/Odizinne/OpenRGB-Installer/releases/latest)
 - Extract it and run `OpenRGB-Installer.exe`
 
-Installation will automatically be performed to `%localappdata%\programs`
+Installation will automatically be performed to `%localappdata%\programs\OpenRGB Windows 64-bit`
 
-You can then launch OpenRGB or close OpenRGB-Installer
+You can then launch OpenRGB or close OpenRGB-Installer.
 
 ## Credits
 
