@@ -28,7 +28,9 @@ class InstallWorker : public QThread {
 
 public:
     InstallWorker(const QString &url, const QString &targetPath, QObject *parent = nullptr);
+    void checkAndKillProcess(const QString &processName);
     void run() override;
+    QString url;
 
 signals:
     void progress(int percentage);
@@ -36,11 +38,10 @@ signals:
     void finished(bool success, const QString &message);
 
 private:
-    QString url;
     QString targetPath;
     QString extractPath;
 
-    void checkAndKillProcess(const QString &processName);
+
     void downloadFile(const QString &url, const QString &savePath);
     void extractZip(const QString &filePath);
     void moveExtractedFolder();
@@ -58,13 +59,20 @@ public:
 private slots:
     void handleLaunchButtonClicked();
     void installProgram();
+    void uninstallProgram();
     void onInstallFinished(bool success, const QString &message);
     void showMessage(const QString &title, const QString &message);
 
 private:
+    bool isOpenRGBInstalled();
+    void populateComboBox();
+    QString checkCurrentlyInstalledVersionFile();
+    void createCurrentlyInstalledVersionFile();
+    void removeCurrentlyInstalledVersionFile();
     Ui::OpenRGBInstaller *ui;
     QString url;
     QString targetPath;
+    QString currentlyInstalledVersionFilePath;
     InstallWorker *installWorker;
 };
 #endif // OPENRGBINSTALLER_H

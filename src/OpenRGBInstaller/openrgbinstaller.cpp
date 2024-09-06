@@ -166,7 +166,6 @@ void InstallWorker::createShortcuts(const QString &executablePath) {
     QString startMenuPath = QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation) + "/OpenRGB.lnk";
     QString desktopPath = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/OpenRGB.lnk";
 
-    // Function to create a shortcut
     auto createShortcut = [](const QString &path, const QString &target, const QString &iconPath, const QString &startIn) {
         HRESULT hResult;
         IShellLink *pShellLink = nullptr;
@@ -174,7 +173,6 @@ void InstallWorker::createShortcuts(const QString &executablePath) {
 
         hResult = CoInitialize(nullptr);
         if (FAILED(hResult)) {
-            qDebug() << "Failed to initialize COM library";
             return;
         }
 
@@ -194,13 +192,8 @@ void InstallWorker::createShortcuts(const QString &executablePath) {
         CoUninitialize();
     };
 
-    // Create Start Menu shortcut
     createShortcut(startMenuPath, executablePath + "/OpenRGB.exe", executablePath + "/OpenRGB.exe", targetPath + "/OpenRGB Windows 64-bit");
-
-    // Create Desktop shortcut
     createShortcut(desktopPath, executablePath + "/OpenRGB.exe", executablePath + "/OpenRGB.exe", targetPath + "/OpenRGB Windows 64-bit");
-
-    qDebug() << "Shortcuts created. Start Menu:" << startMenuPath << "Desktop:" << desktopPath;
 }
 
 
@@ -208,20 +201,26 @@ OpenRGBInstaller::OpenRGBInstaller(QWidget *parent) : QMainWindow(parent), ui(ne
     ui->setupUi(this);
     setWindowIcon(QIcon(":/icons/openrgb-installer.png"));
     setFixedSize(this->size());
+    populateComboBox();
 
     url = "https://gitlab.com/CalcProgrammer1/OpenRGB/-/jobs/artifacts/master/download?job=Windows%2064";
     targetPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/Programs";
+    currentlyInstalledVersionFilePath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/installed_version.txt";
 
     installWorker = new InstallWorker(url, targetPath, this);
     connect(installWorker, &InstallWorker::progress, ui->statusProgressBar, &QProgressBar::setValue);
-    connect(installWorker, &InstallWorker::status, ui->statusLabel, &QLabel::setText);
+    connect(installWorker, &InstallWorker::status, ui->statusProgressBar, &QProgressBar::setFormat);
     connect(installWorker, &InstallWorker::finished, this, &OpenRGBInstaller::onInstallFinished);
-
-    ui->launchButton->setEnabled(false);
+    connect(ui->installButton, &QPushButton::pressed, this, &OpenRGBInstaller::installProgram);
+    connect(ui->uninstallButton, &QPushButton::pressed, this, &OpenRGBInstaller::uninstallProgram);
     connect(ui->launchButton, &QPushButton::clicked, this, &OpenRGBInstaller::handleLaunchButtonClicked);
 
-    qDebug() << "Starting installation process...";
-    installProgram();
+    ui->installedVersionLabel->setText(checkCurrentlyInstalledVersionFile());
+    ui->uninstallButton->setEnabled(isOpenRGBInstalled());
+    ui->launchButton->setEnabled(isOpenRGBInstalled());
+    if (isOpenRGBInstalled())
+        ui->installButton->setText("Reinstall");
+    ui->statusProgressBar->setFormat("Ready");
 }
 
 OpenRGBInstaller::~OpenRGBInstaller() {
@@ -242,20 +241,123 @@ void OpenRGBInstaller::handleLaunchButtonClicked() {
 }
 
 void OpenRGBInstaller::installProgram() {
-    // Kill OpenRGB processes if needed (not implemented in this C++ code)
+    ui->installButton->setEnabled(false);
+    ui->uninstallButton->setEnabled(false);
+    ui->launchButton->setEnabled(false);
+    ui->versionComboBox->setEnabled(false);
+    QString selectedVersion = ui->versionComboBox->currentText();
+
+    if (selectedVersion == "Master") {
+        url = "https://gitlab.com/CalcProgrammer1/OpenRGB/-/jobs/artifacts/master/download?job=Windows%2064";
+    } else if (selectedVersion == "0.9") {
+        url = "https://openrgb.org/releases/release_0.9/OpenRGB_0.9_Windows_64_b5f46e3.zip";
+    } else if (selectedVersion == "0.8") {
+        url = "https://openrgb.org/releases/release_0.8/OpenRGB_0.8_Windows_64_fb88964.zip";
+    } else if (selectedVersion == "0.7") {
+        url = "https://openrgb.org/releases/release_0.7/OpenRGB_0.7_Windows_64_6128731.zip";
+    } else if (selectedVersion == "0.6") {
+        url = "https://openrgb.org/releases/release_0.6/OpenRGB_0.6_Windows_64_405ff7f.zip";
+    } else {
+        qDebug() << "Unknown version selected. Unable to determine URL.";
+        return;
+    }
+
+    qDebug() << "Selected version:" << selectedVersion;
+    qDebug() << "Corresponding download URL:" << url;
+
     ui->statusProgressBar->setValue(0);
-    ui->statusLabel->setText(tr("Starting install..."));
+    ui->statusProgressBar->setVisible(true);
+    ui->statusProgressBar->setFormat(tr("Starting install..."));
     qDebug() << "Initiating install worker thread.";
+    installWorker->url = url;
     installWorker->start();
+}
+
+
+void OpenRGBInstaller::uninstallProgram() {
+    ui->statusProgressBar->setFormat(tr("Uninstalling OpenRGB..."));
+    ui->statusProgressBar->setValue(0);
+    ui->installButton->setEnabled(false);
+    ui->uninstallButton->setEnabled(false);
+    ui->launchButton->setEnabled(false);
+
+    try {
+        qDebug() << "Checking if OpenRGB process is running...";
+        installWorker->checkAndKillProcess("OpenRGB.exe");
+        ui->statusProgressBar->setValue(25);
+        qDebug() << "OpenRGB process closed.";
+
+        QString installDir = targetPath + "/OpenRGB Windows 64-bit";
+        QDir dir(installDir);
+        if (dir.exists()) {
+            qDebug() << "Removing OpenRGB installation directory:" << installDir;
+            if (!dir.removeRecursively()) {
+                throw std::runtime_error(tr("Failed to remove OpenRGB installation directory.").toStdString());
+            }
+            qDebug() << "Installation directory removed.";
+        } else {
+            qDebug() << "Installation directory does not exist.";
+        }
+        ui->statusProgressBar->setValue(50);
+
+        QString startMenuShortcut = QStandardPaths::writableLocation(QStandardPaths::ApplicationsLocation) + "/OpenRGB.lnk";
+        QString desktopShortcut = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/OpenRGB.lnk";
+
+        QFile startMenuFile(startMenuShortcut);
+        QFile desktopFile(desktopShortcut);
+
+        if (startMenuFile.exists()) {
+            qDebug() << "Removing Start Menu shortcut:" << startMenuShortcut;
+            if (!startMenuFile.remove()) {
+                throw std::runtime_error(tr("Failed to remove Start Menu shortcut.").toStdString());
+            }
+            qDebug() << "Start Menu shortcut removed.";
+        } else {
+            qDebug() << "Start Menu shortcut does not exist.";
+        }
+
+        if (desktopFile.exists()) {
+            qDebug() << "Removing Desktop shortcut:" << desktopShortcut;
+            if (!desktopFile.remove()) {
+                throw std::runtime_error(tr("Failed to remove Desktop shortcut.").toStdString());
+            }
+            qDebug() << "Desktop shortcut removed.";
+        } else {
+            qDebug() << "Desktop shortcut does not exist.";
+        }
+        ui->statusProgressBar->setValue(75);
+
+        ui->statusProgressBar->setValue(100);
+        ui->statusProgressBar->setFormat(tr("Uninstall complete."));
+        showMessage(tr("Success"), tr("OpenRGB uninstalled successfully."));
+        removeCurrentlyInstalledVersionFile();
+        ui->installedVersionLabel->setText(checkCurrentlyInstalledVersionFile());
+        ui->installButton->setEnabled(true);
+        ui->uninstallButton->setEnabled(false);
+        ui->launchButton->setEnabled(false);
+        ui->installButton->setText("Install");
+    } catch (const std::exception &e) {
+        qDebug() << "Uninstall error:" << e.what();
+        ui->statusProgressBar->setFormat(tr("Uninstall failed."));
+        showMessage(tr("Error"), tr("An error occurred during uninstallation: %1").arg(e.what()));
+    }
+    ui->statusProgressBar->setValue(0);
 }
 
 void OpenRGBInstaller::onInstallFinished(bool success, const QString &message) {
     if (success) {
         ui->launchButton->setEnabled(true);
-        ui->statusLabel->setText(tr("Install finished."));
+        ui->uninstallButton->setEnabled(true);
+        ui->installButton->setEnabled(true);
+        ui->versionComboBox->setEnabled(true);
+        ui->installButton->setText("Reinstall");
+        ui->statusProgressBar->setFormat(tr("Install finished."));
         showMessage(tr("Success"), message);
+        createCurrentlyInstalledVersionFile();
+        ui->installedVersionLabel->setText(checkCurrentlyInstalledVersionFile());
+        ui->statusProgressBar->setValue(0);
     } else {
-        ui->statusLabel->setText(tr("Install failed."));
+        ui->statusProgressBar->setFormat(tr("Install failed."));
         showMessage(tr("Error"), message);
     }
 }
@@ -267,4 +369,87 @@ void OpenRGBInstaller::showMessage(const QString &title, const QString &message)
     msgBox.setText(message);
     msgBox.setIcon(title == tr("Success") ? QMessageBox::Information : QMessageBox::Critical);
     msgBox.exec();
+}
+
+bool OpenRGBInstaller::isOpenRGBInstalled() {
+    QString installDir = targetPath + "/OpenRGB Windows 64-bit";
+
+    QDir dir(installDir);
+    if (dir.exists()) {
+        qDebug() << "OpenRGB is installed. Directory exists at:" << installDir;
+        return true;
+    } else {
+        qDebug() << "OpenRGB is not installed. Directory does not exist.";
+        return false;
+    }
+}
+
+void OpenRGBInstaller::populateComboBox() {
+    ui->versionComboBox->addItem("Master");
+    ui->versionComboBox->addItem("0.9");
+    ui->versionComboBox->addItem("0.8");
+    ui->versionComboBox->addItem("0.7");
+    ui->versionComboBox->addItem("0.6");
+}
+
+QString OpenRGBInstaller::checkCurrentlyInstalledVersionFile() {
+    QFile file(currentlyInstalledVersionFilePath);
+    qDebug() << currentlyInstalledVersionFilePath;
+    if (!file.exists()) {
+        qDebug() << "here";
+        return "N/A";
+    }
+
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qDebug() << "there";
+
+        return "N/A";
+    }
+
+    QString fileContent = file.readAll();
+
+    file.close();
+    return fileContent;
+}
+
+
+void OpenRGBInstaller::createCurrentlyInstalledVersionFile() {
+    QString appDataLocation = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir(appDataLocation);
+
+    if (!dir.exists()) {
+        if (!dir.mkpath(appDataLocation)) {
+            qDebug() << "Failed to create directory:" << appDataLocation;
+            return;
+        }
+    }
+
+    QFile file(currentlyInstalledVersionFilePath);
+
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qDebug() << "Failed to open file for writing";
+        return;
+    }
+
+    QTextStream out(&file);
+    out << ui->versionComboBox->currentText();
+
+    file.close();
+}
+
+void OpenRGBInstaller::removeCurrentlyInstalledVersionFile() {
+    QString appDataLocation = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir dir(appDataLocation);
+    QFile file(currentlyInstalledVersionFilePath);
+
+    if (file.exists()) {
+        if (file.remove()) {
+            dir.removeRecursively();
+            qDebug() << "File deleted successfully!";
+        } else {
+            qDebug() << "Failed to delete the file.";
+        }
+    } else {
+        qDebug() << "File does not exist.";
+    }
 }
